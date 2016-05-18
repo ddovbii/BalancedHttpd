@@ -1,0 +1,86 @@
+#  Licensed under the Apache License, Version 2.0 (the "License"); you may
+#  not use this file except in compliance with the License. You may obtain
+#  a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#  License for the specific language governing permissions and limitations
+#  under the License.
+
+Namespaces:
+  std: io.murano
+  sys: io.murano.system
+  conf: io.murano.configuration
+  lbaas: io.murano.lbaas
+  db: io.murano.databases
+  =: io.murano.apps.apache
+
+Name: BalancedHttpd
+
+Extends: std:Application
+
+Properties:
+  listener:
+    Contract: $.class(lbaas:HAListener).notNull()
+
+  webServers:
+    Contract:
+      - $.class(ApacheHttpServer).notNull()
+
+  nodeCount:
+    Contract: $.int().notNull().check($ > 0)
+
+Methods:
+  initialize:
+    Body:
+      - $._environment: $.find(std:Environment).require()
+
+  deploy:
+    Body:
+      - If: not $.getAttr(deployed, false)
+        Then:
+          - $._environment.reporter.report($this, 'Configuring security groups.')
+          - $securityGroupIngress:
+            - ToPort: 80
+              FromPort: 80
+              IpProtocol: tcp
+              External: true
+            - ToPort: 443
+              FromPort: 443
+              IpProtocol: tcp
+              External: true
+          - $._environment.securityGroupManager.addGroupIngress($securityGroupIngress)
+ 
+          - $._environment.reporter.report($this, 'Deploying apache nodes.')
+          - $.webServers.take($.nodeCount).pselect($.deploy())
+
+          - $._environment.reporter.report($this, 'Adding diagnostic html page.')
+
+          - $linux: new(conf:Linux)
+          - $resources: new(sys:Resources)
+          - $path: '/var/www/html/index.html'
+
+          - For: app
+            In: $this.webServers
+            Do:
+              - $file: $resources.string('index.html').replace(
+                  dict('$webserver' => $app.instance.name,
+                       '$address' => $app.instance.ipAddresses.first()))
+              - $linux.putFile($app.instance.agent, $file, $path)
+
+          - $._environment.reporter.report($this, 'Creating pool of webservers')
+          - $this.listener.loadBalancer.createPool(
+              name=>'apachepool', algorithm=>'roundrobin', protocol=>'http', listener=>$this.listener)
+          - $.webServers.select($this.listener.loadBalancer.addHostToPool(
+              'apachepool', $.instance.name, $.instance.ipAddresses.first(), 80))
+          - $this.listener.loadBalancer.deploy()
+          - If: $this.listener.loadBalancer.instance.assignFloatingIp
+            Then:
+              - $host: $this.listener.loadBalancer.instance.floatingIpAddress
+            Else:
+              - $host: $this.listener.loadBalancer.instance.ipAddresses.first()
+          - $._environment.reporter.report($this, format('Apache is available at http://{0}', $host))
+          - $.setAttr(deployed, true)
