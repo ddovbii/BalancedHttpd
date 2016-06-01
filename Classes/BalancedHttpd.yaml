@@ -14,7 +14,7 @@ Namespaces:
   std: io.murano
   sys: io.murano.system
   conf: io.murano.configuration
-  lbaas: io.murano.lbaas
+  lbaas: org.openstack.murano.lbaas
   db: io.murano.databases
   =: io.murano.apps.apache
 
@@ -24,7 +24,7 @@ Extends: std:Application
 
 Properties:
   listener:
-    Contract: $.class(lbaas:HAListener).notNull()
+    Contract: $.class(lbaas:HAProxyListener).notNull()
 
   webServers:
     Contract:

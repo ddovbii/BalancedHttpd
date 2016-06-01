@@ -28,4 +28,4 @@ Classes:
  io.murano.apps.apache.BalancedHttpd: BalancedHttpd.yaml
 Require:
  io.murano.apps.apache.ApacheHttpServer:
- io.murano.lbaas.HAListener:
+ org.openstack.murano.lbaas.HAProxyListener:

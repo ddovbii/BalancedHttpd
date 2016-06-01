@@ -47,7 +47,7 @@ Forms:
           label: Count of apache instances
           initial: 3
         - name: listener
-          type: io.murano.lbaas.HAListener
+          type: org.openstack.murano.lbaas.HAProxyListener
           label: Listener
         - name: assignFloatingIP
           type: boolean
